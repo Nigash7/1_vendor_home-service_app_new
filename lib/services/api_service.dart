@@ -528,6 +528,25 @@ class ApiService {
     throw Exception('Failed to load profile');
   }
 
+  /// The vendor's own star rating, for the dashboard.
+  ///
+  /// Best-effort: the dashboard is still perfectly usable without it, so a
+  /// failure here returns null rather than taking the whole screen down.
+  /// The endpoint is public, but it still goes through [_withAuth] so a
+  /// vendor whose token has expired is logged out consistently.
+  static Future<Map<String, dynamic>?> getMyRatingSummary(int vendorId) async {
+    try {
+      final res = await _withAuth(
+        (headers) => http.get(
+          Uri.parse('$kApiBaseUrl/reviews/vendor/$vendorId/'),
+          headers: headers,
+        ),
+      );
+      if (res.statusCode == 200) return jsonDecode(res.body);
+    } catch (_) {}
+    return null;
+  }
+
   static Future<void> updateLocation({
     required double latitude,
     required double longitude,
@@ -543,6 +562,100 @@ class ApiService {
     );
     if (res.statusCode != 200) {
       throw Exception('Failed to update location');
+    }
+  }
+
+  // ---------- Help & Support ----------
+  //
+  // The same endpoints the customer app uses. The server works out whether
+  // the caller is a vendor or a customer from the token, so nothing here
+  // needs to say which app is asking.
+
+  /// Runs [send], and if the token has expired, refreshes it and retries once.
+  static Future<http.Response> _withAuth(
+    Future<http.Response> Function(Map<String, String> headers) send,
+  ) async {
+    var res = await send(await _authHeaders());
+    if (res.statusCode == 401) {
+      if (await _tryRefreshToken()) {
+        res = await send(await _authHeaders());
+      } else {
+        await _forceLogout();
+        throw Exception('Session expired. Please log in again.');
+      }
+    }
+    return res;
+  }
+
+  static Future<List<dynamic>> getMyTickets() async {
+    final res = await _withAuth(
+      (headers) =>
+          http.get(Uri.parse('$kApiBaseUrl/support/my/'), headers: headers),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load your support tickets.');
+  }
+
+  /// The categories a vendor is allowed to raise a ticket under.
+  static Future<List<dynamic>> getTicketCategories() async {
+    final res = await _withAuth(
+      (headers) => http.get(
+        Uri.parse('$kApiBaseUrl/support/categories/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load support categories.');
+  }
+
+  static Future<int> createTicket({
+    required String subject,
+    required String category,
+    required String message,
+    int? bookingId,
+  }) async {
+    final body = jsonEncode({
+      'subject': subject,
+      'category': category,
+      'message': message,
+      if (bookingId != null) 'booking': bookingId,
+    });
+    final res = await _withAuth(
+      (headers) => http.post(
+        Uri.parse('$kApiBaseUrl/support/create/'),
+        headers: headers,
+        body: body,
+      ),
+    );
+    if (res.statusCode == 201) return jsonDecode(res.body)['id'];
+    throw Exception(_extractFirstError(jsonDecode(res.body)));
+  }
+
+  static Future<Map<String, dynamic>> getTicketDetail(int ticketId) async {
+    final res = await _withAuth(
+      (headers) => http.get(
+        Uri.parse('$kApiBaseUrl/support/$ticketId/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load this ticket.');
+  }
+
+  static Future<void> addTicketMessage({
+    required int ticketId,
+    required String message,
+  }) async {
+    final body = jsonEncode({'message': message});
+    final res = await _withAuth(
+      (headers) => http.post(
+        Uri.parse('$kApiBaseUrl/support/$ticketId/message/'),
+        headers: headers,
+        body: body,
+      ),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Could not send your message. Please try again.');
     }
   }
 }

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'services/api_service.dart';
+import 'services/branding_service.dart';
 import 'services/push_service.dart';
-import 'screens/login_screen.dart';
-import 'screens/jobs_list_screen.dart';
+import 'screens/splash_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -13,6 +13,11 @@ Future<void> main() async {
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await PushService.init();
+
+  // Cached branding first so the login screen paints the right logo
+  // immediately, then refresh in the background for the next launch.
+  await BrandingService.load();
+  BrandingService.refresh();
 
   // Already signed in from a previous session? Refresh the device token.
   if (await ApiService.isLoggedIn()) {
@@ -39,27 +44,7 @@ class VendorApp extends StatelessWidget {
         ),
       ),
       navigatorKey: navigatorKey,
-      home: const _StartupGate(),
-    );
-  }
-}
-
-class _StartupGate extends StatelessWidget {
-  const _StartupGate();
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: ApiService.isLoggedIn(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final loggedIn = snapshot.data ?? false;
-        return loggedIn ? const JobsListScreen() : const LoginScreen();
-      },
+      home: const SplashScreen(),
     );
   }
 }

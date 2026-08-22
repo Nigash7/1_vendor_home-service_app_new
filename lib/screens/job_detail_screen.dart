@@ -5,6 +5,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geocoding/geocoding.dart';
 import '../services/api_service.dart';
+import '../widgets/slide_action.dart';
+
+/// The vendor app's accent, matching the login, jobs list and notification
+/// screens. Literal rather than `colorScheme.primary`, because the Material 3
+/// scheme generated from the deepOrange seed comes out noticeably muted.
+const Color _accent = Colors.deepOrange;
 
 class JobDetailScreen extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -20,17 +26,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   bool _isProcessing = false;
   String? _statusMessage;
   File? _capturedImage;
-  String? _convertedAddress; // NEW: Store converted address
-  bool _isLoadingAddress = false; // NEW: Track address loading state
+  String? _convertedAddress;
+  bool _isLoadingAddress = false;
 
   @override
   void initState() {
     super.initState();
     _job = widget.job;
-    _convertCustomerLocationToAddress(); // NEW: Convert coordinates on load
+    _convertCustomerLocationToAddress();
   }
 
-  /// NEW METHOD: Reverse geocode coordinates to readable address
   /// Reverse geocode coordinates to readable address
   Future<void> _convertCustomerLocationToAddress() async {
     // location_lat / location_lng may arrive as String from DRF DecimalField
@@ -201,196 +206,343 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
   }
 
+  // ----------------------------------------------------------------- build
   @override
   Widget build(BuildContext context) {
-    final status = _job['status'];
+    final status = '${_job['status']}';
 
     return Scaffold(
-      appBar: AppBar(title: Text(_job['category_name'] ?? 'Job Detail')),
+      backgroundColor: const Color(0xFFF2F2F5),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+        title: Text(
+          _job['category_name'] ?? 'Job Detail',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          _infoRow(Icons.person, 'Customer', _job['customer_name'] ?? '-'),
+          _buildSummaryCard(status),
+          const SizedBox(height: 12),
+          _buildCustomerCard(),
+          const SizedBox(height: 12),
+          _buildLocationCard(),
+          const SizedBox(height: 12),
+          _buildScheduleCard(),
 
-          // 1. What the customer typed when booking
-          _infoRow(
-            Icons.home_outlined,
-            'Address (customer entered)',
-            _customerGivenAddress,
+          if (_hasFormData()) ...[
+            const SizedBox(height: 12),
+            _buildRequirementsCard(),
+          ],
+
+          if (_capturedImage != null) ...[
+            const SizedBox(height: 12),
+            _buildPhotoCard(),
+          ],
+
+          if (_statusMessage != null) ...[
+            const SizedBox(height: 16),
+            _buildStatusMessage(),
+          ],
+
+          const SizedBox(height: 24),
+          _buildAction(status),
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------ summary
+  Widget _buildSummaryCard(String status) {
+    final meta = _statusMeta(status);
+    final paid = '${_job['payment_status']}'.toUpperCase() == 'PAID';
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: meta.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(meta.icon, size: 15, color: meta.color),
+                    const SizedBox(width: 6),
+                    Text(
+                      meta.label,
+                      style: TextStyle(
+                        color: meta.color,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '#${_job['id']}',
+                style: TextStyle(fontSize: 12.5, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Job value',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '₹${_job['amount']}',
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: (paid ? Colors.green : Colors.orange).withValues(
+                    alpha: 0.12,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${_job['payment_status']}',
+                  style: TextStyle(
+                    color: paid ? Colors.green.shade800 : Colors.orange.shade900,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------ customer
+  Widget _buildCustomerCard() {
+    final name = '${_job['customer_name'] ?? '-'}';
+    final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
+
+    return _card(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: _accent.withValues(alpha: 0.12),
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: _accent,
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (_customerPhone.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _customerPhone,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
 
-          // 2. What the pinned GPS coordinates actually resolve to
-          if (_hasCoordinates)
-            _infoRow(
-              Icons.my_location,
+          if (_customerPhone.isNotEmpty || _hasCoordinates) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                if (_customerPhone.isNotEmpty)
+                  Expanded(
+                    child: _actionChip(
+                      icon: Icons.call_rounded,
+                      label: 'Call',
+                      color: Colors.green.shade700,
+                      onTap: _callCustomer,
+                    ),
+                  ),
+                if (_customerPhone.isNotEmpty && _hasCoordinates)
+                  const SizedBox(width: 10),
+                if (_hasCoordinates)
+                  Expanded(
+                    child: _actionChip(
+                      icon: Icons.directions_rounded,
+                      label: 'Navigate',
+                      color: Colors.blue.shade700,
+                      onTap: _navigateToCustomer,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------ location
+  Widget _buildLocationCard() {
+    return _card(
+      title: 'Location',
+      icon: Icons.location_on_outlined,
+      child: Column(
+        children: [
+          _detailRow(
+            Icons.home_outlined,
+            'Address given by customer',
+            _customerGivenAddress,
+          ),
+          if (_hasCoordinates) ...[
+            const SizedBox(height: 14),
+            _detailRow(
+              Icons.my_location_rounded,
               'Pinned location (GPS)',
               _isLoadingAddress
                   ? 'Resolving address...'
                   : (_convertedAddress ??
                         'Could not resolve — ${_job['location_lat']}, ${_job['location_lng']}'),
             ),
-
-          if (_customerPhone.isNotEmpty) ...[
-            _infoRow(Icons.phone, 'Phone', _customerPhone),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: OutlinedButton.icon(
-                onPressed: _callCustomer,
-                icon: const Icon(Icons.call),
-                label: const Text('Call Customer'),
-              ),
-            ),
           ],
-          if (_job['location_lat'] != null && _job['location_lng'] != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: OutlinedButton.icon(
-                onPressed: _navigateToCustomer,
-                icon: const Icon(Icons.directions),
-                label: const Text('Navigate to Customer'),
-              ),
-            ),
-          _infoRow(
-            Icons.calendar_today,
-            'Date & Time',
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------ schedule
+  Widget _buildScheduleCard() {
+    final notes = '${_job['notes'] ?? ''}'.trim();
+
+    return _card(
+      title: 'Schedule',
+      icon: Icons.event_outlined,
+      child: Column(
+        children: [
+          _detailRow(
+            Icons.calendar_today_outlined,
+            'Date & time',
             '${_job['preferred_date']} at ${_job['preferred_time']}',
           ),
-          _infoRow(
-            Icons.notes,
-            'Notes',
-            (_job['notes'] as String?)?.isNotEmpty == true
-                ? _job['notes']
-                : 'None',
-          ),
-          _infoRow(
-            Icons.currency_rupee,
-            'Amount',
-            '₹${_job['amount']} (${_job['payment_status']})',
-          ),
-          const SizedBox(height: 20),
-          // Service form responses
-          if (_hasFormData()) ...[
-            const SizedBox(height: 8),
-            const Divider(),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.assignment, size: 20, color: Colors.deepOrange[400]),
-                const SizedBox(width: 8),
-                const Text(
-                  'Customer Requirements',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ..._buildFormResponses(),
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _detailRow(Icons.sticky_note_2_outlined, 'Customer notes', notes),
           ],
-
-          const SizedBox(height: 20),
-
-          if (_capturedImage != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                _capturedImage!,
-                height: 200,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          if (_statusMessage != null) ...[
-            Text(
-              _statusMessage!,
-              style: TextStyle(
-                color:
-                    _statusMessage!.contains('success') ||
-                        _statusMessage!.contains('completed')
-                    ? Colors.green
-                    : Colors.red,
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          if (status == 'ASSIGNED')
-            ElevatedButton.icon(
-              onPressed: _isProcessing ? null : _startJob,
-              icon: _isProcessing
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.camera_alt),
-              label: Text(
-                _isProcessing ? 'Please wait...' : 'Take Photo & Start Job',
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                backgroundColor: Colors.blue,
-              ),
-            )
-          else if (status == 'IN_PROGRESS')
-            ElevatedButton.icon(
-              onPressed: _isProcessing ? null : _completeJob,
-              icon: _isProcessing
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.check_circle),
-              label: Text(
-                _isProcessing ? 'Please wait...' : 'Mark Job Complete',
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                backgroundColor: Colors.green,
-              ),
-            )
-          else if (status == 'COMPLETED')
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text(
-                  '✅ This job is completed.',
-                  style: TextStyle(color: Colors.green, fontSize: 16),
-                ),
-              ),
-            ),
         ],
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+  // -------------------------------------------------------- requirements
+  Widget _buildRequirementsCard() {
+    return _card(
+      title: 'Customer requirements',
+      icon: Icons.assignment_outlined,
+      child: Column(children: _buildFormResponses()),
+    );
+  }
+
+  // ------------------------------------------------------------- photo
+  Widget _buildPhotoCard() {
+    return _card(
+      title: 'Arrival photo',
+      icon: Icons.photo_camera_outlined,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.file(
+          _capturedImage!,
+          height: 200,
+          width: double.infinity,
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------ status message
+  Widget _buildStatusMessage() {
+    final message = _statusMessage!;
+    final isGood =
+        message.contains('success') ||
+        message.contains('completed') ||
+        message.endsWith('...');
+    final color = isGood ? Colors.green.shade700 : Colors.red.shade700;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: Colors.grey[600]),
-          const SizedBox(width: 12),
+          Icon(
+            isGood ? Icons.check_circle_outline : Icons.error_outline,
+            color: color,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-                Text(value, style: const TextStyle(fontSize: 15)),
-              ],
+            child: Text(
+              message,
+              style: TextStyle(
+                color: color,
+                fontSize: 13.5,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -398,81 +550,310 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     );
   }
 
-  bool _hasFormData() {
-    final services = _job['services_json'];
-    if (services is! List) return false;
-    for (final svc in services) {
-      final formData = svc['form_data'];
-      if (formData is List && formData.isNotEmpty) return true;
-    }
-    return false;
-  }
-
-  List<Widget> _buildFormResponses() {
-    final widgets = <Widget>[];
-    final services = _job['services_json'];
-    if (services is! List) return widgets;
-
-    for (final svc in services) {
-      final formData = svc['form_data'];
-      if (formData is! List || formData.isEmpty) continue;
-
-      // Service name header
-      widgets.add(
-        Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.deepOrange.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.deepOrange.shade100),
+  // ------------------------------------------------------------- action
+  Widget _buildAction(String status) {
+    if (status == 'ASSIGNED') {
+      return Column(
+        children: [
+          SlideAction(
+            label: 'Slide to start job',
+            processingLabel: 'Starting...',
+            icon: Icons.camera_alt_rounded,
+            color: Colors.blue,
+            enabled: !_isProcessing,
+            onConfirm: _startJob,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 10),
+          Text(
+            'Opens the camera and records your location',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ],
+      );
+    }
+
+    if (status == 'IN_PROGRESS') {
+      return Column(
+        children: [
+          SlideAction(
+            label: 'Slide to finish job',
+            processingLabel: 'Finishing...',
+            icon: Icons.check_rounded,
+            color: Colors.green,
+            enabled: !_isProcessing,
+            onConfirm: _completeJob,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'This marks the job complete for the customer',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ],
+      );
+    }
+
+    if (status == 'COMPLETED') {
+      return Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.green.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(30),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
+              Icon(
+                Icons.check_circle_rounded,
+                color: Colors.green,
+                size: 22,
+              ),
+              SizedBox(width: 10),
               Text(
-                svc['name'] ?? 'Service',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+                'This job is completed',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 8),
-              ...formData.map<Widget>((resp) {
-                final title = resp['title'] ?? '';
-                final answer = resp['answer'] ?? '';
-                if (answer.toString().trim().isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                        ),
-                      ),
-                      Text(
-                        answer.toString(),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
             ],
           ),
         ),
       );
     }
-    return widgets;
+
+    return const SizedBox.shrink();
+  }
+
+  // ------------------------------------------------------------- pieces
+  /// White rounded panel with an optional titled header.
+  Widget _card({required Widget child, String? title, IconData? icon}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) ...[
+            Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 18, color: _accent),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 34,
+          width: 34,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 17, color: Colors.grey.shade700),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: const TextStyle(fontSize: 14.5, height: 1.35),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: color.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 19, color: color),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Label, colour and icon for each booking status.
+  ({String label, Color color, IconData icon}) _statusMeta(String status) {
+    switch (status) {
+      case 'ASSIGNED':
+        return (
+          label: 'ASSIGNED',
+          color: Colors.blue.shade700,
+          icon: Icons.assignment_ind_outlined,
+        );
+      case 'IN_PROGRESS':
+        return (
+          label: 'IN PROGRESS',
+          color: _accent,
+          icon: Icons.timelapse_rounded,
+        );
+      case 'COMPLETED':
+        return (
+          label: 'COMPLETED',
+          color: Colors.green.shade700,
+          icon: Icons.check_circle_outline,
+        );
+      case 'CANCELLED':
+        return (
+          label: 'CANCELLED',
+          color: Colors.red.shade700,
+          icon: Icons.cancel_outlined,
+        );
+      default:
+        return (
+          label: status,
+          color: Colors.grey.shade700,
+          icon: Icons.info_outline,
+        );
+    }
+  }
+
+  /// What the customer answered, as the API groups it: one entry per service
+  /// or form, each with its own {title, answer} rows. The server already drops
+  /// blank answers and flattens multi-select lists into readable text.
+  List<Map<String, dynamic>> get _formGroups {
+    final groups = _job['form_groups'];
+    if (groups is! List) return const [];
+
+    return groups
+        .whereType<Map>()
+        .map(
+          (group) => {
+            'title': '${group['title'] ?? ''}',
+            'responses': (group['responses'] as List? ?? const [])
+                .whereType<Map>()
+                .map(
+                  (resp) => {
+                    'title': '${resp['title'] ?? ''}',
+                    'answer': '${resp['answer'] ?? ''}',
+                  },
+                )
+                .toList(),
+          },
+        )
+        .where((group) => (group['responses'] as List).isNotEmpty)
+        .toList();
+  }
+
+  bool _hasFormData() => _formGroups.isNotEmpty;
+
+  List<Widget> _buildFormResponses() {
+    return _formGroups.map((group) {
+      final responses = group['responses'] as List<Map<String, String>>;
+      final title = group['title'] as String;
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _accent.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _accent.withValues(alpha: 0.18)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (title.isNotEmpty) ...[
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                  color: _accent,
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            ...responses.map(
+              (resp) => Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      resp['title']!,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      resp['answer']!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList();
   }
 
   bool get _hasCoordinates =>

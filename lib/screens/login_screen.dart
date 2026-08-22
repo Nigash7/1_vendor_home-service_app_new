@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import 'jobs_list_screen.dart';
+import '../services/branding_service.dart';
+import '../widgets/app_logo.dart';
+import 'dashboard_screen.dart';
 
 /// Vendor logs in with the username/password the ADMIN created for them
 /// in the Django admin panel -- there is no self-signup in this app.
@@ -62,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen>
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const JobsListScreen()),
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
       );
     } catch (e) {
       setState(
@@ -101,7 +103,6 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -139,37 +140,36 @@ class _LoginScreenState extends State<LoginScreen>
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // Icon & Title
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.deepOrange.withOpacity(0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.engineering,
-                                  size: 56,
-                                  color: Colors.deepOrange,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Text(
-                                'Vendor Login',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.headlineSmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.deepOrange.shade800,
+                              // Logo & Title — both admin-managed
+                              BrandingBuilder(
+                                builder: (context) => Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const AppLogo(),
+                                    const SizedBox(height: 20),
+                                    Text(
+                                      BrandingService.appName ?? 'Vendor Login',
+                                      textAlign: TextAlign.center,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .headlineSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.deepOrange.shade800,
+                                          ),
                                     ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Use the credentials provided by your administrator',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 14,
-                                  height: 1.4,
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      BrandingService.tagline ??
+                                          'Use the credentials provided by your administrator',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 14,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(height: 32),

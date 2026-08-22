@@ -2,6 +2,43 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- ===== iOS permissions / networking (required on iPhone) ===== -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Pro Home Partner uses your location to find jobs near you and to share your position with the customer on an active job.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Pro Home Partner uses your location to find jobs near you and to share your position with the customer on an active job.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Pro Home Partner needs the camera so you can photograph completed work as proof of the job.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Pro Home Partner needs access to your photos so you can attach pictures of completed work.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Pro Home Partner saves job photos to your library.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Pro Home Partner needs the microphone when you record a video of completed work.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Pro Home Partner connects to the Home Service server on your local network.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<!-- iOS blocks plain http:// by default. The dev backend runs on http://192.168.1.11:8000,
+	     so it is whitelisted here. Switch the API to https:// for the App Store build and
+	     you can delete this whole NSAppTransportSecurity block. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>192.168.1.11</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>LSApplicationQueriesSchemes</key>

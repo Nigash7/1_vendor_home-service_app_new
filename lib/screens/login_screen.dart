@@ -3,9 +3,12 @@ import '../services/api_service.dart';
 import '../services/branding_service.dart';
 import '../widgets/app_logo.dart';
 import 'dashboard_screen.dart';
+import 'signup_screen.dart';
+import 'vendor_status_screen.dart';
 
-/// Vendor logs in with the username/password the ADMIN created for them
-/// in the Django admin panel -- there is no self-signup in this app.
+/// Vendor logs in with a username/password — either the one an ADMIN created
+/// for them, or one they chose when signing up. A self-registered vendor is
+/// refused until an admin verifies their profile.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -57,14 +60,28 @@ class _LoginScreenState extends State<LoginScreen>
       _errorMessage = null;
     });
 
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+
     try {
-      await ApiService.login(
-        _usernameController.text.trim(),
-        _passwordController.text,
-      );
+      await ApiService.login(username, password);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const DashboardScreen()),
+      );
+    } on VendorNotApprovedException catch (e) {
+      // The password was right — sending them back to the login form would
+      // only make them doubt it. Show where the application actually stands.
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VendorStatusScreen(
+            username: username,
+            password: password,
+            verificationStatus: e.verificationStatus,
+            message: e.message,
+          ),
+        ),
       );
     } catch (e) {
       setState(
@@ -394,8 +411,40 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                               ),
 
+                              // Self-signup
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    "Don't have an account?",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _isLoading
+                                        ? null
+                                        : () => Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const SignupScreen(),
+                                            ),
+                                          ),
+                                    child: const Text(
+                                      'Sign up',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.deepOrange,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
                               // Security Note
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 8),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [

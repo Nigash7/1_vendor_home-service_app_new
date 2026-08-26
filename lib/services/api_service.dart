@@ -283,6 +283,21 @@ import '../screens/login_screen.dart';
 import 'notification_service.dart';
 import 'push_service.dart';
 
+/// The username and password were right, but the vendor's profile has not
+/// been verified by an admin yet — so there is nothing to fix by retyping
+/// the password. [verificationStatus] is 'PENDING', 'REJECTED' or null.
+class VendorNotApprovedException implements Exception {
+  final String? verificationStatus;
+  final String message;
+
+  const VendorNotApprovedException(this.verificationStatus, this.message);
+
+  bool get isRejected => verificationStatus == 'REJECTED';
+
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   static const _tokenKey = 'access_token';
   static const _refreshKey = 'refresh_token';
@@ -367,11 +382,106 @@ class ApiService {
       final data = jsonDecode(res.body);
       await _saveTokens(data['access'], data['refresh']);
       PushService.registerToken();
-    } else {
-      throw Exception(
-        'Login failed. Please check your username and password with your admin.',
+      return;
+    }
+
+    // The server answers 403 when the credentials are correct but the profile
+    // is still awaiting (or was refused) admin verification.
+    if (res.statusCode == 403) {
+      final data = jsonDecode(res.body);
+      throw VendorNotApprovedException(
+        data['verification_status'],
+        data['detail'] ?? 'Your profile has not been approved yet.',
       );
     }
+
+    throw Exception(
+      'Login failed. Please check your username and password.',
+    );
+  }
+
+  // ---------- Signup ----------
+
+  /// Registers a new vendor. The account is created immediately but stays on
+  /// PENDING, so [login] will keep refusing until an admin verifies it.
+  static Future<void> signup({
+    required String username,
+    required String password,
+    required String passwordConfirm,
+    required String firstName,
+    required String lastName,
+    required String phoneNumber,
+    required String email,
+    required List<int> categoryIds,
+    required String serviceArea,
+    required String address,
+    double? latitude,
+    double? longitude,
+    required File idProof,
+    File? addressProof,
+    File? tradeCertificate,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$kApiBaseUrl/vendors/signup/'),
+    );
+
+    request.fields.addAll({
+      'username': username,
+      'password': password,
+      'password_confirm': passwordConfirm,
+      'first_name': firstName,
+      'last_name': lastName,
+      'phone_number': phoneNumber,
+      'email': email,
+      'service_area': serviceArea,
+      'address': address,
+      // A multipart body cannot repeat a field key, so the server accepts the
+      // chosen categories as one comma-separated value.
+      'categories': categoryIds.join(','),
+      if (latitude != null) 'latitude': latitude.toStringAsFixed(6),
+      if (longitude != null) 'longitude': longitude.toStringAsFixed(6),
+    });
+
+    request.files.add(
+      await http.MultipartFile.fromPath('id_proof', idProof.path),
+    );
+    if (addressProof != null) {
+      request.files.add(
+        await http.MultipartFile.fromPath('address_proof', addressProof.path),
+      );
+    }
+    if (tradeCertificate != null) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'trade_certificate',
+          tradeCertificate.path,
+        ),
+      );
+    }
+
+    final res = await http.Response.fromStream(await request.send());
+    if (res.statusCode != 201) {
+      // A crash or a proxy answers in HTML, not JSON. Decoding that blindly
+      // would surface a parser error instead of something a vendor can act on.
+      String message;
+      try {
+        message = _extractFirstError(jsonDecode(res.body));
+      } catch (_) {
+        message =
+            'The server could not process your application '
+            '(error ${res.statusCode}). Please try again later.';
+      }
+      throw Exception(message);
+    }
+  }
+
+  /// The service categories a vendor can pick from on the signup form.
+  /// Public endpoint — no token needed, since the vendor has no account yet.
+  static Future<List<dynamic>> getServiceCategories() async {
+    final res = await http.get(Uri.parse('$kApiBaseUrl/services/categories/'));
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load service categories.');
   }
 
   static String _extractFirstError(dynamic body) {

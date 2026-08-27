@@ -10,6 +10,7 @@ import 'location_settings_screen.dart';
 import 'notification_screen.dart';
 import 'profile_screen.dart';
 import 'support_screen.dart';
+import 'tenders_screen.dart';
 
 /// The vendor app's accent, matching the login, jobs list and job detail
 /// screens. Literal rather than `colorScheme.primary`, because the Material 3
@@ -1210,12 +1211,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Expanded(
                 child: _action(
+                  Icons.gavel_rounded,
+                  'Tenders',
+                  () => _openThenReload(const TendersScreen()),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _action(
                   Icons.location_on_outlined,
                   'Work Location',
                   () => _openThenReload(const LocationSettingsScreen()),
                 ),
               ),
-              const SizedBox(width: 12),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
               Expanded(
                 child: _action(
                   Icons.support_agent,
@@ -1223,6 +1236,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   () => _openThenReload(const SupportScreen()),
                 ),
               ),
+              const SizedBox(width: 12),
+              const Expanded(child: SizedBox()),
             ],
           ),
         ],

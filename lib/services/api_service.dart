@@ -768,4 +768,238 @@ class ApiService {
       throw Exception('Could not send your message. Please try again.');
     }
   }
+
+  // ---------- Tenders (customer requirements to bid on) ----------
+  //
+  // Only tenders this vendor's categories cover come back from the server;
+  // there is no client-side filtering to get wrong.
+
+  /// Reads the server's error message, falling back to something readable
+  /// when the body is HTML from a crash or a proxy rather than JSON.
+  static String _errorFrom(http.Response res, String fallback) {
+    try {
+      return _extractFirstError(jsonDecode(res.body));
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  /// Open tenders this vendor can bid on.
+  static Future<List<dynamic>> getOpenTenders({
+    int? categoryId,
+    String? projectType,
+    String? pincode,
+    String? district,
+  }) async {
+    final params = <String, String>{
+      if (categoryId != null) 'category': '$categoryId',
+      if (projectType != null && projectType.isNotEmpty)
+        'project_type': projectType,
+      if (pincode != null && pincode.isNotEmpty) 'pincode': pincode,
+      if (district != null && district.isNotEmpty) 'district': district,
+    };
+    final uri = Uri.parse(
+      '$kApiBaseUrl/tenders/open/',
+    ).replace(queryParameters: params.isEmpty ? null : params);
+
+    final res = await _withAuth((headers) => http.get(uri, headers: headers));
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load tenders.');
+  }
+
+  static Future<Map<String, dynamic>> getTenderDetail(int tenderId) async {
+    final res = await _withAuth(
+      (headers) => http.get(
+        Uri.parse('$kApiBaseUrl/tenders/$tenderId/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load this tender.');
+  }
+
+  /// Every bid this vendor has placed, won or lost.
+  static Future<List<dynamic>> getMyBids() async {
+    final res = await _withAuth(
+      (headers) =>
+          http.get(Uri.parse('$kApiBaseUrl/tenders/my-bids/'), headers: headers),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load your bids.');
+  }
+
+  /// Projects this vendor won and is running.
+  static Future<List<dynamic>> getMyTenderProjects() async {
+    final res = await _withAuth(
+      (headers) =>
+          http.get(Uri.parse('$kApiBaseUrl/tenders/awarded/'), headers: headers),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load your projects.');
+  }
+
+  /// Submits a bid. [milestones] is a list of {title, description, amount}
+  /// maps; the server replaces the whole set on every save.
+  static Future<Map<String, dynamic>> submitBid({
+    required int tenderId,
+    required String amount,
+    String workPlan = '',
+    int? timelineDays,
+    String? proposedStartDate,
+    String notes = '',
+    List<Map<String, dynamic>> milestones = const [],
+  }) async {
+    final body = jsonEncode({
+      'amount': amount,
+      'work_plan': workPlan,
+      if (timelineDays != null) 'timeline_days': timelineDays,
+      if (proposedStartDate != null) 'proposed_start_date': proposedStartDate,
+      'notes': notes,
+      if (milestones.isNotEmpty) 'milestones': milestones,
+    });
+
+    final res = await _withAuth(
+      (headers) => http.post(
+        Uri.parse('$kApiBaseUrl/tenders/$tenderId/bid/'),
+        headers: headers,
+        body: body,
+      ),
+    );
+    if (res.statusCode == 201) return jsonDecode(res.body);
+    throw Exception(_errorFrom(res, 'Could not submit your bid.'));
+  }
+
+  /// Revises an existing bid. Leaving [milestones] null keeps the plan the
+  /// vendor already submitted; passing an empty list clears it.
+  static Future<Map<String, dynamic>> reviseBid({
+    required int tenderId,
+    required String amount,
+    String workPlan = '',
+    int? timelineDays,
+    String? proposedStartDate,
+    String notes = '',
+    List<Map<String, dynamic>>? milestones,
+  }) async {
+    final body = jsonEncode({
+      'amount': amount,
+      'work_plan': workPlan,
+      if (timelineDays != null) 'timeline_days': timelineDays,
+      if (proposedStartDate != null) 'proposed_start_date': proposedStartDate,
+      'notes': notes,
+      if (milestones != null) 'milestones': milestones,
+    });
+
+    final res = await _withAuth(
+      (headers) => http.patch(
+        Uri.parse('$kApiBaseUrl/tenders/$tenderId/bid/'),
+        headers: headers,
+        body: body,
+      ),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception(_errorFrom(res, 'Could not update your bid.'));
+  }
+
+  static Future<void> withdrawBid(int tenderId) async {
+    final res = await _withAuth(
+      (headers) => http.delete(
+        Uri.parse('$kApiBaseUrl/tenders/$tenderId/bid/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode != 200) {
+      throw Exception(_errorFrom(res, 'Could not withdraw your bid.'));
+    }
+  }
+
+  // ---------- Running an awarded project ----------
+
+  static Future<void> startTenderProject(int tenderId) async {
+    final res = await _withAuth(
+      (headers) => http.post(
+        Uri.parse('$kApiBaseUrl/tenders/$tenderId/start/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode != 200) {
+      throw Exception(_errorFrom(res, 'Could not start this project.'));
+    }
+  }
+
+  static Future<List<dynamic>> getTenderProgress(int tenderId) async {
+    final res = await _withAuth(
+      (headers) => http.get(
+        Uri.parse('$kApiBaseUrl/tenders/$tenderId/progress/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load the progress updates.');
+  }
+
+  /// Posts an update with any number of photos. Multipart, so it does not go
+  /// through [_withAuth] — the files would have to be re-read on the retry.
+  static Future<void> postTenderProgress({
+    required int tenderId,
+    required String message,
+    int? percentComplete,
+    List<File> images = const [],
+  }) async {
+    final uri = Uri.parse('$kApiBaseUrl/tenders/$tenderId/progress/add/');
+
+    Future<http.Response> send() async {
+      final token = await getAccessToken();
+      final request = http.MultipartRequest('POST', uri);
+      if (token != null) request.headers['Authorization'] = 'Bearer $token';
+      request.fields['message'] = message;
+      if (percentComplete != null) {
+        request.fields['percent_complete'] = '$percentComplete';
+      }
+      for (final image in images) {
+        request.files.add(
+          await http.MultipartFile.fromPath('images', image.path),
+        );
+      }
+      return http.Response.fromStream(await request.send());
+    }
+
+    var res = await send();
+    if (res.statusCode == 401) {
+      if (await _tryRefreshToken()) {
+        res = await send();
+      } else {
+        await _forceLogout();
+        throw Exception('Session expired. Please log in again.');
+      }
+    }
+    if (res.statusCode != 201) {
+      throw Exception(_errorFrom(res, 'Could not post your update.'));
+    }
+  }
+
+  /// Marks a stage of work complete, which puts the payment in front of the
+  /// customer.
+  static Future<void> reachTenderMilestone(int milestoneId) async {
+    final res = await _withAuth(
+      (headers) => http.post(
+        Uri.parse('$kApiBaseUrl/tenders/milestones/$milestoneId/reach/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode != 200) {
+      throw Exception(_errorFrom(res, 'Could not update that milestone.'));
+    }
+  }
+
+  static Future<void> completeTenderProject(int tenderId) async {
+    final res = await _withAuth(
+      (headers) => http.post(
+        Uri.parse('$kApiBaseUrl/tenders/$tenderId/complete/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode != 200) {
+      throw Exception(_errorFrom(res, 'Could not complete this project.'));
+    }
+  }
 }

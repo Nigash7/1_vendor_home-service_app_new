@@ -420,6 +420,7 @@ class ApiService {
     required File idProof,
     File? addressProof,
     File? tradeCertificate,
+    int? planId,
   }) async {
     final request = http.MultipartRequest(
       'POST',
@@ -441,6 +442,9 @@ class ApiService {
       'categories': categoryIds.join(','),
       if (latitude != null) 'latitude': latitude.toStringAsFixed(6),
       if (longitude != null) 'longitude': longitude.toStringAsFixed(6),
+      // The tier they tapped. Every vendor lands on the free plan regardless;
+      // picking anything above it raises a request for an admin to answer.
+      if (planId != null) 'plan': '$planId',
     });
 
     request.files.add(
@@ -1002,4 +1006,128 @@ class ApiService {
       throw Exception(_errorFrom(res, 'Could not complete this project.'));
     }
   }
+
+  // ---------- Payout / bank account ----------
+
+  /// The vendor's own payout details.
+  ///
+  /// Returns `{has_account: bool, account: {...}|null}`. The account number
+  /// only ever comes back masked -- the server never sends it in full.
+  static Future<Map<String, dynamic>> getBankAccount() async {
+    final res = await _withAuth(
+      (headers) => http.get(
+        Uri.parse('$kApiBaseUrl/vendors/me/bank-account/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load your payout details.');
+  }
+
+  /// Adds or replaces the payout account.
+  ///
+  /// [confirmAccountNumber] is checked against [accountNumber] on the server,
+  /// so a mistyped digit is caught before it can send money to a stranger.
+  static Future<Map<String, dynamic>> saveBankAccount({
+    required String accountHolderName,
+    required String accountNumber,
+    required String confirmAccountNumber,
+    required String ifscCode,
+    String bankName = '',
+    String branchName = '',
+    String accountType = 'SAVINGS',
+    String upiId = '',
+  }) async {
+    final res = await _withAuth(
+      (headers) => http.put(
+        Uri.parse('$kApiBaseUrl/vendors/me/bank-account/'),
+        headers: headers,
+        body: jsonEncode({
+          'account_holder_name': accountHolderName,
+          'account_number': accountNumber,
+          'confirm_account_number': confirmAccountNumber,
+          'ifsc_code': ifscCode,
+          'bank_name': bankName,
+          'branch_name': branchName,
+          'account_type': accountType,
+          'upi_id': upiId,
+        }),
+      ),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception(_errorFrom(res, 'Could not save your payout details.'));
+  }
+
+  /// Past changes to the payout account, so a vendor can spot one they did
+  /// not make themselves.
+  static Future<List<dynamic>> getBankAccountHistory() async {
+    final res = await _withAuth(
+      (headers) => http.get(
+        Uri.parse('$kApiBaseUrl/vendors/me/bank-account/history/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load the change history.');
+  }
+
+  // ---------- Subscriptions ----------
+
+  /// The plans on offer. Public, so the signup screen can show them before
+  /// the vendor has an account.
+  static Future<List<dynamic>> getSubscriptionPlans() async {
+    final res = await http.get(Uri.parse('$kApiBaseUrl/subscriptions/plans/'));
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load the subscription plans.');
+  }
+
+  /// Everything the subscription screen shows in one call: the plan the
+  /// vendor is on, an upgrade they are waiting on, what else is available,
+  /// and the terms they have finished.
+  ///
+  /// `current` is null when they are on nothing — not an error, and not a
+  /// state a vendor who signed up recently will be in.
+  static Future<Map<String, dynamic>> getMySubscription() async {
+    final res = await _withAuth(
+      (headers) => http.get(
+        Uri.parse('$kApiBaseUrl/subscriptions/me/'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Could not load your plan.');
+  }
+
+  /// Asks to be moved to [planId]. This does not change the vendor's plan —
+  /// an admin answers it, and approving is what starts the new term.
+  static Future<Map<String, dynamic>> requestPlanUpgrade({
+    required int planId,
+    String note = '',
+  }) async {
+    final res = await _withAuth(
+      (headers) => http.post(
+        Uri.parse('$kApiBaseUrl/subscriptions/upgrade-requests/'),
+        headers: headers,
+        body: jsonEncode({'plan': planId, 'note': note}),
+      ),
+    );
+    if (res.statusCode == 201) return jsonDecode(res.body);
+    throw Exception(_errorFrom(res, 'Could not send your request.'));
+  }
+
+  /// Takes back a request nobody has answered yet.
+  static Future<void> withdrawPlanUpgrade(int requestId) async {
+    final res = await _withAuth(
+      (headers) => http.post(
+        Uri.parse(
+          '$kApiBaseUrl/subscriptions/upgrade-requests/$requestId/withdraw/',
+        ),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode != 200) {
+      throw Exception(_errorFrom(res, 'Could not withdraw your request.'));
+    }
+  }
 }
+

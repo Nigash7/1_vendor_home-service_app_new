@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import 'bank_account_screen.dart';
 import 'location_settings_screen.dart';
 import 'login_screen.dart';
+import 'subscription_screen.dart';
 import 'support_screen.dart';
 
 /// The vendor's own profile: identity, verification state, the work they are
@@ -22,6 +24,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isSavingAvailability = false;
   String? _errorMessage;
 
+  // Loaded separately from the profile: payout details are their own
+  // endpoint, and a failure there must not blank the whole screen.
+  Map<String, dynamic>? _bankAccount;
+  bool _hasBankAccount = false;
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isLoading = false;
         });
       }
+      await _loadBankAccount();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -48,6 +56,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  /// Best-effort — the profile is still usable if this fails, so a payout
+  /// lookup that errors just leaves the card in its "not added" state.
+  Future<void> _loadBankAccount() async {
+    try {
+      final data = await ApiService.getBankAccount();
+      if (!mounted) return;
+      setState(() {
+        _hasBankAccount = data['has_account'] == true;
+        _bankAccount = _hasBankAccount
+            ? Map<String, dynamic>.from(data['account'])
+            : null;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _hasBankAccount = false);
     }
   }
 
@@ -173,6 +198,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ]),
                   const SizedBox(height: 16),
                   _buildSkillsCard(),
+                  const SizedBox(height: 16),
+                  _buildSubscriptionCard(),
+                  const SizedBox(height: 16),
+                  _buildBankAccountCard(),
                   const SizedBox(height: 16),
                   _buildLocationCard(),
                   const SizedBox(height: 16),
@@ -418,6 +447,125 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }).toList(),
             ),
         ],
+      ),
+    );
+  }
+
+  /// The plan the vendor is on, and the way through to the upgrade options.
+  ///
+  /// Ships inside the profile payload, so this costs no extra call. Every
+  /// vendor lands on the free tier at signup, but a vendor from before plans
+  /// existed can still be on nothing until the admin backfills them.
+  Widget _buildSubscriptionCard() {
+    final plan = _profile?['subscription'] as Map<String, dynamic>?;
+    final expiringSoon = plan?['is_expiring_soon'] == true;
+    final daysLeft = plan?['days_remaining'] as int?;
+
+    late final String subtitle;
+    if (plan == null) {
+      subtitle = 'Not on a plan yet. Tap to see what is available.';
+    } else if (plan['end_date'] == null) {
+      subtitle = plan['is_free'] == true
+          ? 'Free plan · no expiry. Tap to see upgrade options.'
+          : '₹${plan['price']} · no expiry. Tap to see other plans.';
+    } else {
+      subtitle =
+          'Renews ${plan['end_date']}'
+          '${daysLeft != null ? ' · $daysLeft day${daysLeft == 1 ? '' : 's'} left' : ''}';
+    }
+
+    return _card(
+      padding: EdgeInsets.zero,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Icon(
+          plan == null ? Icons.workspace_premium_outlined : Icons.workspace_premium,
+          color: plan == null
+              ? Colors.grey
+              : (expiringSoon ? Colors.orange : Colors.deepOrange),
+        ),
+        title: Row(
+          children: [
+            Text(
+              plan == null ? 'My Plan' : '${plan['plan_name']} plan',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            if (plan?['is_free'] == true) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Free',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(
+            fontSize: 12,
+            color: expiringSoon ? Colors.orange.shade800 : Colors.grey.shade600,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+          );
+          // They may have asked for a different plan while they were in there.
+          _loadProfile();
+        },
+      ),
+    );
+  }
+
+  Widget _buildBankAccountCard() {
+    final isVerified = _bankAccount?['is_verified'] == true;
+    final masked = '${_bankAccount?['account_number'] ?? ''}';
+
+    return _card(
+      padding: EdgeInsets.zero,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Icon(
+          _hasBankAccount ? Icons.account_balance : Icons.account_balance_outlined,
+          color: _hasBankAccount
+              ? (isVerified ? Colors.green.shade700 : Colors.orange)
+              : Colors.red.shade600,
+        ),
+        title: const Text(
+          'Payout Account',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          !_hasBankAccount
+              ? 'Not added. We cannot send your earnings without it.'
+              : isVerified
+                  ? 'Verified — $masked'
+                  : '$masked — we are checking these details.',
+          style: TextStyle(
+            fontSize: 12,
+            color: _hasBankAccount ? Colors.grey.shade600 : Colors.red.shade600,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const BankAccountScreen()),
+          );
+          // They may have added or changed the account while in there.
+          _loadBankAccount();
+        },
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../services/api_service.dart';
+import '../widgets/plan_card.dart';
 import 'vendor_status_screen.dart';
 
 /// Self-registration for a new vendor. Collects the same details an admin
@@ -38,6 +39,13 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _loadingCategories = true;
   String? _categoriesError;
 
+  // The plan tiles. Optional by design: the free tier is preselected, and a
+  // catalogue that fails to load just hides the section rather than blocking
+  // a registration over something an admin can sort out afterwards.
+  List<dynamic> _plans = [];
+  int? _selectedPlanId;
+  bool _loadingPlans = true;
+
   File? _idProof;
   File? _addressProof;
   File? _tradeCertificate;
@@ -54,6 +62,7 @@ class _SignupScreenState extends State<SignupScreen> {
   void initState() {
     super.initState();
     _loadCategories();
+    _loadPlans();
   }
 
   @override
@@ -85,6 +94,35 @@ class _SignupScreenState extends State<SignupScreen> {
         _loadingCategories = false;
       });
     }
+  }
+
+  Future<void> _loadPlans() async {
+    try {
+      final plans = await ApiService.getSubscriptionPlans();
+      if (!mounted) return;
+      setState(() {
+        _plans = plans;
+        // Land on the tier the admin nominated as the default, or the
+        // cheapest free one, so "Submit" works without touching this section.
+        _selectedPlanId = _defaultPlanId(plans);
+        _loadingPlans = false;
+      });
+    } catch (_) {
+      // Not worth an error banner: signing up without picking a plan is
+      // allowed, and the server puts every new vendor on the free tier anyway.
+      if (!mounted) return;
+      setState(() => _loadingPlans = false);
+    }
+  }
+
+  int? _defaultPlanId(List<dynamic> plans) {
+    for (final plan in plans) {
+      if (plan['is_default'] == true) return plan['id'] as int?;
+    }
+    for (final plan in plans) {
+      if (plan['is_free'] == true) return plan['id'] as int?;
+    }
+    return null;
   }
 
   Future<void> _pickDocument(void Function(File) onPicked) async {
@@ -189,15 +227,24 @@ class _SignupScreenState extends State<SignupScreen> {
         idProof: _idProof!,
         addressProof: _addressProof,
         tradeCertificate: _tradeCertificate,
+        planId: _selectedPlanId,
       );
       if (!mounted) return;
+      final picked = _plans.firstWhere(
+        (p) => p['id'] == _selectedPlanId,
+        orElse: () => null,
+      );
+      final askedToUpgrade = picked != null && picked['is_free'] != true;
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => VendorStatusScreen.justSubmitted(
             username: _usernameController.text.trim(),
             message:
                 'Your application has been submitted. You will be able to log '
-                'in once an admin has verified your profile.',
+                'in once an admin has verified your profile.'
+                '${askedToUpgrade ? '\n\nYou start on the free plan. Your request '
+                    'to move to ${picked['name']} is with your admin.' : ''}',
           ),
         ),
       );
@@ -246,6 +293,56 @@ class _SignupScreenState extends State<SignupScreen> {
 
   String? _required(String? value, String label) =>
       (value == null || value.trim().isEmpty) ? 'Please enter your $label' : null;
+
+  /// The plan tiles. Nothing here is required — the free tier is already
+  /// ticked — and picking a paid one asks an admin rather than charging or
+  /// granting anything, which the note under the tiles says plainly.
+  Widget _buildPlanSection() {
+    if (_loadingPlans) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_plans.isEmpty) return const SizedBox.shrink();
+
+    final selected = _plans.firstWhere(
+      (p) => p['id'] == _selectedPlanId,
+      orElse: () => null,
+    );
+    final asksForApproval =
+        selected != null && selected['is_free'] != true;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ..._plans.map(
+          (plan) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: PlanCard(
+              plan: plan as Map<String, dynamic>,
+              selected: plan['id'] == _selectedPlanId,
+              onTap: () => setState(() => _selectedPlanId = plan['id'] as int?),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          asksForApproval
+              ? 'You will start on the free plan. Picking ${selected['name']} '
+                    'sends your admin a request — nothing is charged here.'
+              : 'You can change your plan later from your profile.',
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.4,
+            color: asksForApproval
+                ? Colors.orange.shade800
+                : Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _documentTile({
     required String label,
@@ -550,6 +647,10 @@ class _SignupScreenState extends State<SignupScreen> {
                         onCleared: () =>
                             setState(() => _tradeCertificate = null),
                       ),
+
+                      if (_loadingPlans || _plans.isNotEmpty)
+                        _sectionTitle('CHOOSE YOUR PLAN'),
+                      _buildPlanSection(),
 
                       if (_errorMessage != null) ...[
                         const SizedBox(height: 16),

@@ -33,6 +33,14 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _serviceAreaController = TextEditingController();
   final _addressController = TextEditingController();
+  final _districtController = TextEditingController();
+
+  // Where the vendor is based, and the states they will travel to for work.
+  // Picking none is not an error: it means every state, and an admin can
+  // narrow them later from the dashboard.
+  String? _baseState;
+  List<String> _states = [];
+  final Set<String> _selectedStates = {};
 
   List<dynamic> _categories = [];
   final Set<int> _selectedCategoryIds = {};
@@ -63,6 +71,7 @@ class _SignupScreenState extends State<SignupScreen> {
     super.initState();
     _loadCategories();
     _loadPlans();
+    _loadStates();
   }
 
   @override
@@ -76,6 +85,7 @@ class _SignupScreenState extends State<SignupScreen> {
     _emailController.dispose();
     _serviceAreaController.dispose();
     _addressController.dispose();
+    _districtController.dispose();
     super.dispose();
   }
 
@@ -94,6 +104,12 @@ class _SignupScreenState extends State<SignupScreen> {
         _loadingCategories = false;
       });
     }
+  }
+
+  Future<void> _loadStates() async {
+    final states = await ApiService.getStates();
+    if (!mounted) return;
+    setState(() => _states = states);
   }
 
   Future<void> _loadPlans() async {
@@ -222,6 +238,9 @@ class _SignupScreenState extends State<SignupScreen> {
         categoryIds: _selectedCategoryIds.toList(),
         serviceArea: _serviceAreaController.text.trim(),
         address: _addressController.text.trim(),
+        state: _baseState,
+        district: _districtController.text.trim(),
+        serviceStates: _selectedStates.toList(),
         latitude: _latitude,
         longitude: _longitude,
         idProof: _idProof!,
@@ -275,6 +294,63 @@ class _SignupScreenState extends State<SignupScreen> {
         horizontal: 16,
         vertical: 16,
       ),
+    );
+  }
+
+  /// The states this vendor will take work in.
+  ///
+  /// Nothing ticked is a valid answer and means every state -- customers are
+  /// only told "no vendor in your zone" when the vendors who *did* narrow
+  /// themselves all left that state out.
+  Widget _serviceStatePicker() {
+    if (_states.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'States you can serve',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _selectedStates.isEmpty
+              ? 'Pick every state you will travel to for work. Leave this '
+                    'empty and you are listed for all states.'
+              : '${_selectedStates.length} state'
+                    '${_selectedStates.length == 1 ? '' : 's'} picked.',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          constraints: const BoxConstraints(maxHeight: 220),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(8),
+          child: SingleChildScrollView(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: _states.map<Widget>((state) {
+                final selected = _selectedStates.contains(state);
+                return FilterChip(
+                  label: Text(state),
+                  selected: selected,
+                  selectedColor: Colors.deepOrange.shade100,
+                  checkmarkColor: Colors.deepOrange.shade800,
+                  onSelected: (on) => setState(() {
+                    on
+                        ? _selectedStates.add(state)
+                        : _selectedStates.remove(state);
+                  }),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -591,6 +667,37 @@ class _SignupScreenState extends State<SignupScreen> {
                           Icons.home_outlined,
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _baseState,
+                        isExpanded: true,
+                        decoration: _decoration(
+                          'State you are based in',
+                          Icons.location_city_outlined,
+                        ),
+                        items: _states
+                            .map(
+                              (s) => DropdownMenuItem(value: s, child: Text(s)),
+                            )
+                            .toList(),
+                        onChanged: (value) => setState(() {
+                          _baseState = value;
+                          // The state you live in is one you can work in, so
+                          // tick it for them rather than making them find it
+                          // again in the list below.
+                          if (value != null) _selectedStates.add(value);
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _districtController,
+                        decoration: _decoration(
+                          'District (optional)',
+                          Icons.place_outlined,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _serviceStatePicker(),
                       const SizedBox(height: 12),
                       OutlinedButton.icon(
                         onPressed: _capturingLocation ? null : _captureLocation,

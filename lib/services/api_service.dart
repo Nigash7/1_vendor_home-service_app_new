@@ -415,6 +415,9 @@ class ApiService {
     required List<int> categoryIds,
     required String serviceArea,
     required String address,
+    String? state,
+    String? district,
+    List<String> serviceStates = const [],
     double? latitude,
     double? longitude,
     required File idProof,
@@ -437,9 +440,15 @@ class ApiService {
       'email': email,
       'service_area': serviceArea,
       'address': address,
+      if (state != null && state.isNotEmpty) 'state': state,
+      if (district != null && district.isNotEmpty) 'district': district,
       // A multipart body cannot repeat a field key, so the server accepts the
       // chosen categories as one comma-separated value.
       'categories': categoryIds.join(','),
+      // Same trick for the states this vendor will work in. Sending none
+      // means every state, which is what the server assumes when the list is
+      // left empty.
+      if (serviceStates.isNotEmpty) 'service_states': serviceStates.join(','),
       if (latitude != null) 'latitude': latitude.toStringAsFixed(6),
       if (longitude != null) 'longitude': longitude.toStringAsFixed(6),
       // The tier they tapped. Every vendor lands on the free plan regardless;
@@ -486,6 +495,23 @@ class ApiService {
     final res = await http.get(Uri.parse('$kApiBaseUrl/services/categories/'));
     if (res.statusCode == 200) return jsonDecode(res.body);
     throw Exception('Could not load service categories.');
+  }
+
+  /// The states the signup form offers, straight from the server so the
+  /// vendor app and the admin dashboard spell them the same way.
+  ///
+  /// Returns an empty list on failure: not being able to reach the server
+  /// must not stop somebody registering, and no states picked simply means
+  /// the vendor covers every one until an admin narrows them.
+  static Future<List<String>> getStates() async {
+    try {
+      final res = await http.get(Uri.parse('$kApiBaseUrl/vendors/states/'));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        return List<String>.from(body['states'] as List<dynamic>);
+      }
+    } catch (_) {}
+    return [];
   }
 
   static String _extractFirstError(dynamic body) {

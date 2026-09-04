@@ -193,6 +193,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildSection('Work Details', [
                     _row(Icons.map_outlined, 'Service area',
                         '${_profile?['service_area'] ?? ''}'),
+                    _row(Icons.location_city_outlined, 'Based in',
+                        _basedIn()),
+                    // Set by an admin, so it is shown rather than edited.
+                    // Nothing listed means this vendor is offered everywhere,
+                    // which is worth saying out loud.
+                    _row(Icons.public_outlined, 'Where you serve',
+                        _servedRegions(), maxLines: 4),
                     _row(Icons.home_outlined, 'Address',
                         '${_profile?['address'] ?? ''}', maxLines: 3),
                   ]),
@@ -624,6 +631,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ------------------------------------------------------------------ helpers
+  /// "Ernakulam, Kerala", or an empty string when neither is on file.
+  String _basedIn() {
+    final parts = [
+      '${_profile?['district'] ?? ''}'.trim(),
+      '${_profile?['state'] ?? ''}'.trim(),
+    ].where((p) => p.isNotEmpty);
+    return parts.join(', ');
+  }
+
+  /// "Kerala — Ernakulam, Thrissur", one entry per state, or all of them.
+  String _servedRegions() {
+    final regions = (_profile?['service_regions'] as List<dynamic>?) ?? [];
+    return regions.isEmpty ? 'All states' : regions.join('  •  ');
+  }
+
   Widget _buildSection(String title, List<Widget> rows) {
     return _card(
       child: Column(

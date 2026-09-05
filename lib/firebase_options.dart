@@ -57,21 +57,18 @@ class DefaultFirebaseOptions {
     storageBucket: 'rni-home-services.firebasestorage.app',
   );
 
-  // STILL THE OLD PROJECT. Android has moved to the client's Firebase project
-  // (rni-home-services); iOS has not, because its GoogleService-Info.plist has
-  // not been issued yet. Replace all six values from that file when it arrives.
-  //
-  // Nothing is broken by this today -- an iOS build needs a Mac, which is not
-  // set up yet, so this path is unreachable. It is only dangerous the moment
-  // someone does build for iPhone: push would silently register against a
-  // Firebase project the client does not own, and no notification the backend
-  // sends would ever arrive.
+  // These values, not ios/Runner/GoogleService-Info.plist, are what actually
+  // configure Firebase here: main.dart calls initializeApp with
+  // DefaultFirebaseOptions.currentPlatform. The plist sits alongside them for
+  // the Firebase iOS SDK's own use and must still be added to the Runner
+  // target in Xcode -- it is on disk but not yet referenced by the project,
+  // which cannot be done from Windows. See ios/README-firebase.md.
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCjplCQd9VkhksKszwsA3dsQQtt9MoK-64',
-    appId: '1:879153194201:ios:768f8fb58ef5c1bebbcac8',
-    messagingSenderId: '879153194201',
-    projectId: 'prohome-8f3c8',
-    storageBucket: 'prohome-8f3c8.firebasestorage.app',
+    apiKey: 'AIzaSyCyisgCYmXFDGVGkRFk-FphwJyMuIBTvLY',
+    appId: '1:392326867102:ios:367aaf5d3e5ef27b42f38f',
+    messagingSenderId: '392326867102',
+    projectId: 'rni-home-services',
+    storageBucket: 'rni-home-services.firebasestorage.app',
     iosBundleId: 'com.rniservices.vendor',
   );
 }

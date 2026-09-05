@@ -50,19 +50,28 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDkI1AiHL-GQMumdxjZU8p90BcfjN2bWoE',
-    appId: '1:879153194201:android:44b7cf7533d1c6f2bbcac8',
-    messagingSenderId: '879153194201',
-    projectId: 'prohome-8f3c8',
-    storageBucket: 'prohome-8f3c8.firebasestorage.app',
+    apiKey: 'AIzaSyAcoOkAcAuvLZ9AlJzMn2BoGmgqihUk1-8',
+    appId: '1:392326867102:android:1e2dc722b9fb995f42f38f',
+    messagingSenderId: '392326867102',
+    projectId: 'rni-home-services',
+    storageBucket: 'rni-home-services.firebasestorage.app',
   );
 
+  // STILL THE OLD PROJECT. Android has moved to the client's Firebase project
+  // (rni-home-services); iOS has not, because its GoogleService-Info.plist has
+  // not been issued yet. Replace all six values from that file when it arrives.
+  //
+  // Nothing is broken by this today -- an iOS build needs a Mac, which is not
+  // set up yet, so this path is unreachable. It is only dangerous the moment
+  // someone does build for iPhone: push would silently register against a
+  // Firebase project the client does not own, and no notification the backend
+  // sends would ever arrive.
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCjplCQd9VkhksKszwsA3dsQQtt9MoK-64',
     appId: '1:879153194201:ios:768f8fb58ef5c1bebbcac8',
     messagingSenderId: '879153194201',
     projectId: 'prohome-8f3c8',
     storageBucket: 'prohome-8f3c8.firebasestorage.app',
-    iosBundleId: 'com.example.vendorApp',
+    iosBundleId: 'com.rniservices.vendor',
   );
 }

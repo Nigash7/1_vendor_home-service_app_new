@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "879153194201",
-    "project_id": "prohome-8f3c8",
-    "storage_bucket": "prohome-8f3c8.firebasestorage.app"
+    "project_number": "392326867102",
+    "project_id": "rni-home-services",
+    "storage_bucket": "rni-home-services.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:879153194201:android:9fc99e783dc79bc5bbcac8",
+        "mobilesdk_app_id": "1:392326867102:android:5a8df5d6a203a28442f38f",
         "android_client_info": {
-          "package_name": "com.example.customer_app"
+          "package_name": "com.rniservices.customer"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDkI1AiHL-GQMumdxjZU8p90BcfjN2bWoE"
+          "current_key": "AIzaSyAcoOkAcAuvLZ9AlJzMn2BoGmgqihUk1-8"
         }
       ],
       "services": {
@@ -26,15 +26,15 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:879153194201:android:44b7cf7533d1c6f2bbcac8",
+        "mobilesdk_app_id": "1:392326867102:android:1e2dc722b9fb995f42f38f",
         "android_client_info": {
-          "package_name": "com.example.vendor_app"
+          "package_name": "com.rniservices.vendor"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDkI1AiHL-GQMumdxjZU8p90BcfjN2bWoE"
+          "current_key": "AIzaSyAcoOkAcAuvLZ9AlJzMn2BoGmgqihUk1-8"
         }
       ],
       "services": {
